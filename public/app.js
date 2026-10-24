@@ -219,7 +219,7 @@ async function renderStudio() {
           <h2>新書</h2>
           <form class="form" id="new-book">
             <label>書名 <input name="title" required /></label>
-            <label>作者 <input name="author" value="JC" /></label>
+            <label>作者 <input name="author" value="杰西" /></label>
             <label>一句話簡介 <input name="tagline" /></label>
             <label>封面
               <select name="cover">${covers.map(([id, label]) => `<option value="${id}">${label}</option>`).join("")}</select>
