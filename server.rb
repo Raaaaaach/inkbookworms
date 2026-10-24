@@ -41,7 +41,7 @@ if !File.file?(DATA_FILE) && File.file?(SEED_FILE) && File.expand_path(SEED_FILE
 end
 books = load_books
 sample = books.find { |item| item["id"] == "sandletters" }
-if sample && sample["author"] == "Ra"
+if sample && sample["author"].to_s != "JC"
   sample["author"] = "JC"
   save_books(books)
 end
