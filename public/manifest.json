@@ -3,7 +3,7 @@
   "short_name": "Ink Bookworms",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#efe4d4",
+  "background_color": "#ffffff",
   "theme_color": "#241c16",
   "icons": [
     {
