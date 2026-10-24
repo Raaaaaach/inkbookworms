@@ -83,7 +83,7 @@ async function renderLibrary() {
     ${topbar("library")}
     <section class="hero">
       <h1>有人寫，有人讀。</h1>
-      <p>作者在寫作室寫下章節，發布之後，讀者就能在這裡翻開。先從下面這本樣書開始。</p>
+      <p>作者在寫作室寫下章節，發布之後，讀者就能在這裡翻開。先從下面<span class="nowrap">這本樣書開始。</span></p>
     </section>
     ${error ? `<p class="empty flash">${escapeHtml(error)}</p>` : ""}
     ${

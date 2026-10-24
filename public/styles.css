@@ -119,10 +119,16 @@ button {
 
 .hero p {
   margin: 0;
-  max-width: 36em;
+  max-width: 40em;
   color: var(--ink-soft);
   font-size: 17px;
   line-height: 1.7;
+  text-wrap: pretty;
+  line-break: strict;
+}
+
+.nowrap {
+  white-space: nowrap;
 }
 
 .grid {
@@ -183,6 +189,8 @@ button {
   color: var(--ink-soft);
   line-height: 1.55;
   flex: 1;
+  text-wrap: pretty;
+  line-break: strict;
 }
 
 .layout {
@@ -269,6 +277,8 @@ button {
   font-size: 20px;
   line-height: 1.9;
   margin: 0 0 1.1em;
+  text-wrap: pretty;
+  line-break: strict;
 }
 
 .pager {
