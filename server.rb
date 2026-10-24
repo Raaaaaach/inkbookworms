@@ -39,6 +39,12 @@ SEED_FILE = File.join(ROOT, "data", "books.json")
 if !File.file?(DATA_FILE) && File.file?(SEED_FILE) && File.expand_path(SEED_FILE) != File.expand_path(DATA_FILE)
   FileUtils.cp(SEED_FILE, DATA_FILE)
 end
+books = load_books
+sample = books.find { |item| item["id"] == "sandletters" }
+if sample && sample["author"] == "Ra"
+  sample["author"] = "JC"
+  save_books(books)
+end
 
 def load_books
   return [] unless File.file?(DATA_FILE)
