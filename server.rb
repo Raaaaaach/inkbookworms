@@ -115,13 +115,13 @@ server.mount_proc "/api" do |req, res|
     if method == "POST" && parts == ["auth"]
       body = parse_body(req)
       unless body
-        json!(res, { "error" => "无效的请求" }, 400)
+        json!(res, { "error" => "無效的請求" }, 400)
         next
       end
       if body["password"].to_s == PASSWORD
         json!(res, { "ok" => true })
       else
-        json!(res, { "error" => "密码不对" }, 401)
+        json!(res, { "error" => "密碼不對" }, 401)
       end
     elsif method == "GET" && parts == ["books"]
       books = load_books
@@ -132,23 +132,23 @@ server.mount_proc "/api" do |req, res|
     elsif method == "GET" && parts.length == 2 && parts[0] == "books"
       book = find_book(parts[1])
       if book.nil? || (book["status"] != "published" && !author?(req))
-        json!(res, { "error" => "找不到这本书" }, 404)
+        json!(res, { "error" => "找不到這本書" }, 404)
       else
         json!(res, { "book" => book })
       end
     elsif method == "POST" && parts == ["books"]
       unless author?(req)
-        json!(res, { "error" => "需要作者密码" }, 401)
+        json!(res, { "error" => "需要作者密碼" }, 401)
         next
       end
       body = parse_body(req)
       unless body
-        json!(res, { "error" => "无效的请求" }, 400)
+        json!(res, { "error" => "無效的請求" }, 400)
         next
       end
       title = body["title"].to_s.strip
       if title.empty?
-        json!(res, { "error" => "请填写书名" }, 400)
+        json!(res, { "error" => "請填寫書名" }, 400)
         next
       end
       stamp = now
@@ -169,18 +169,18 @@ server.mount_proc "/api" do |req, res|
       json!(res, { "book" => book }, 201)
     elsif method == "PUT" && parts.length == 2 && parts[0] == "books"
       unless author?(req)
-        json!(res, { "error" => "需要作者密码" }, 401)
+        json!(res, { "error" => "需要作者密碼" }, 401)
         next
       end
       body = parse_body(req)
       unless body
-        json!(res, { "error" => "无效的请求" }, 400)
+        json!(res, { "error" => "無效的請求" }, 400)
         next
       end
       books = load_books
       index = books.index { |item| item["id"] == parts[1] }
       if index.nil?
-        json!(res, { "error" => "找不到这本书" }, 404)
+        json!(res, { "error" => "找不到這本書" }, 404)
         next
       end
       book = books[index]
@@ -192,7 +192,7 @@ server.mount_proc "/api" do |req, res|
         book["status"] = body["status"] == "published" ? "published" : "draft"
       end
       if book["title"].to_s.empty?
-        json!(res, { "error" => "请填写书名" }, 400)
+        json!(res, { "error" => "請填寫書名" }, 400)
         next
       end
       book["updatedAt"] = now
@@ -201,36 +201,36 @@ server.mount_proc "/api" do |req, res|
       json!(res, { "book" => book })
     elsif method == "DELETE" && parts.length == 2 && parts[0] == "books"
       unless author?(req)
-        json!(res, { "error" => "需要作者密码" }, 401)
+        json!(res, { "error" => "需要作者密碼" }, 401)
         next
       end
       books = load_books
       before = books.length
       books.reject! { |item| item["id"] == parts[1] }
       if books.length == before
-        json!(res, { "error" => "找不到这本书" }, 404)
+        json!(res, { "error" => "找不到這本書" }, 404)
         next
       end
       save_books(books)
       json!(res, { "ok" => true })
     elsif method == "POST" && parts.length == 3 && parts[0] == "books" && parts[2] == "chapters"
       unless author?(req)
-        json!(res, { "error" => "需要作者密码" }, 401)
+        json!(res, { "error" => "需要作者密碼" }, 401)
         next
       end
       body = parse_body(req)
       unless body
-        json!(res, { "error" => "无效的请求" }, 400)
+        json!(res, { "error" => "無效的請求" }, 400)
         next
       end
       books = load_books
       index = books.index { |item| item["id"] == parts[1] }
       if index.nil?
-        json!(res, { "error" => "找不到这本书" }, 404)
+        json!(res, { "error" => "找不到這本書" }, 404)
         next
       end
       title = body["title"].to_s.strip
-      title = "未命名章节" if title.empty?
+      title = "未命名章節" if title.empty?
       stamp = now
       chapter = {
         "id" => SecureRandom.hex(8),
@@ -246,29 +246,29 @@ server.mount_proc "/api" do |req, res|
       json!(res, { "chapter" => chapter, "book" => books[index] }, 201)
     elsif method == "PUT" && parts.length == 4 && parts[0] == "books" && parts[2] == "chapters"
       unless author?(req)
-        json!(res, { "error" => "需要作者密码" }, 401)
+        json!(res, { "error" => "需要作者密碼" }, 401)
         next
       end
       body = parse_body(req)
       unless body
-        json!(res, { "error" => "无效的请求" }, 400)
+        json!(res, { "error" => "無效的請求" }, 400)
         next
       end
       books = load_books
       index = books.index { |item| item["id"] == parts[1] }
       if index.nil?
-        json!(res, { "error" => "找不到这本书" }, 404)
+        json!(res, { "error" => "找不到這本書" }, 404)
         next
       end
       chapters = Array(books[index]["chapters"])
       cindex = chapters.index { |item| item["id"] == parts[3] }
       if cindex.nil?
-        json!(res, { "error" => "找不到这一章" }, 404)
+        json!(res, { "error" => "找不到這一章" }, 404)
         next
       end
       chapter = chapters[cindex]
       chapter["title"] = body["title"].to_s.strip unless body["title"].nil?
-      chapter["title"] = "未命名章节" if chapter["title"].to_s.empty?
+      chapter["title"] = "未命名章節" if chapter["title"].to_s.empty?
       chapter["body"] = body["body"].to_s unless body["body"].nil?
       chapter["updatedAt"] = now
       chapters[cindex] = chapter
@@ -278,20 +278,20 @@ server.mount_proc "/api" do |req, res|
       json!(res, { "chapter" => chapter, "book" => books[index] })
     elsif method == "DELETE" && parts.length == 4 && parts[0] == "books" && parts[2] == "chapters"
       unless author?(req)
-        json!(res, { "error" => "需要作者密码" }, 401)
+        json!(res, { "error" => "需要作者密碼" }, 401)
         next
       end
       books = load_books
       index = books.index { |item| item["id"] == parts[1] }
       if index.nil?
-        json!(res, { "error" => "找不到这本书" }, 404)
+        json!(res, { "error" => "找不到這本書" }, 404)
         next
       end
       chapters = Array(books[index]["chapters"])
       before = chapters.length
       chapters.reject! { |item| item["id"] == parts[3] }
       if chapters.length == before
-        json!(res, { "error" => "找不到这一章" }, 404)
+        json!(res, { "error" => "找不到這一章" }, 404)
         next
       end
       books[index]["chapters"] = chapters
@@ -299,16 +299,16 @@ server.mount_proc "/api" do |req, res|
       save_books(books)
       json!(res, { "ok" => true, "book" => books[index] })
     else
-      json!(res, { "error" => "未知接口" }, 404)
+      json!(res, { "error" => "未知介面" }, 404)
     end
   rescue StandardError => e
-    json!(res, { "error" => "服务器出错", "detail" => e.message }, 500)
+    json!(res, { "error" => "伺服器出錯", "detail" => e.message }, 500)
   end
 end
 
 trap("INT") { server.shutdown }
 trap("TERM") { server.shutdown }
 
-$stderr.puts "Bookworms 已启动：http://127.0.0.1:#{PORT}"
-$stderr.puts "作者密码：#{PASSWORD}（可用环境变量 BOOKWORMS_PASSWORD 修改）"
+$stderr.puts "Ink Bookworms 已啟動：http://127.0.0.1:#{PORT}"
+$stderr.puts "作者密碼：#{PASSWORD}（可用環境變數 BOOKWORMS_PASSWORD 修改）"
 server.start

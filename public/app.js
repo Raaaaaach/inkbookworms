@@ -27,7 +27,7 @@ function escapeHtml(value) {
 function paragraphs(text) {
   const chunks = String(text || "").trim().split(/\n\s*\n/);
   if (!chunks.filter(Boolean).length) {
-    return "<p class=\"muted\">这一章还是空白。</p>";
+    return "<p class=\"muted\">這一章還是空白。</p>";
   }
   return chunks.map((chunk) => `<p>${escapeHtml(chunk).replace(/\n/g, "<br>")}</p>`).join("");
 }
@@ -50,7 +50,7 @@ async function api(path, options = {}) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || "请求失败");
+    throw new Error(data.error || "請求失敗");
   }
   return data;
 }
@@ -60,11 +60,11 @@ function topbar(active) {
     <header class="topbar">
       <a class="brand" href="#/">
         <strong>Ink Bookworms</strong>
-        <span>写给愿意停下来的人</span>
+        <span>寫給願意停下來的人</span>
       </a>
       <nav class="nav">
-        <a class="${active === "library" ? "active" : ""}" href="#/">书库</a>
-        <a class="${active === "studio" ? "active" : ""}" href="#/studio">写作室</a>
+        <a class="${active === "library" ? "active" : ""}" href="#/">書庫</a>
+        <a class="${active === "studio" ? "active" : ""}" href="#/studio">寫作室</a>
       </nav>
     </header>
   `;
@@ -82,8 +82,8 @@ async function renderLibrary() {
   app.innerHTML = `
     ${topbar("library")}
     <section class="hero">
-      <h1>有人写，有人读。</h1>
-      <p>作者在写作室写下章节，发布之后，读者就能在这里翻开。先从下面这本样书开始。</p>
+      <h1>有人寫，有人讀。</h1>
+      <p>作者在寫作室寫下章節，發布之後，讀者就能在這裡翻開。先從下面這本樣書開始。</p>
     </section>
     ${error ? `<p class="empty flash">${escapeHtml(error)}</p>` : ""}
     ${
@@ -95,12 +95,12 @@ async function renderLibrary() {
               <div class="cover ${escapeHtml(book.cover || "ink")}">${escapeHtml(book.title)}</div>
               <div class="card-body">
                 <div class="meta">${escapeHtml(book.author)} · ${book.chapterCount} 章</div>
-                <p>${escapeHtml(book.tagline || "打开看看。")}</p>
+                <p>${escapeHtml(book.tagline || "打開看看。")}</p>
               </div>
             </a>`
             )
             .join("")}</section>`
-        : `<p class="empty">书库还是空的。作者可以到写作室发布第一本书。</p>`
+        : `<p class="empty">書庫還是空的。作者可以到寫作室發布第一本書。</p>`
     }
   `;
 }
@@ -124,7 +124,7 @@ async function renderBook(id) {
         <p>${escapeHtml(book.tagline || "")}</p>
       </aside>
       <div class="panel">
-        <h2>目录</h2>
+        <h2>目錄</h2>
         <p class="muted">共 ${chapters.length} 章</p>
         ${
           chapters.length
@@ -136,7 +136,7 @@ async function renderBook(id) {
               </li>`
                 )
                 .join("")}</ol>`
-            : `<p class="muted">还没有章节。</p>`
+            : `<p class="muted">還沒有章節。</p>`
         }
       </div>
     </section>
@@ -155,7 +155,7 @@ async function renderRead(bookId, chapterId) {
   const index = chapters.findIndex((chapter) => chapter.id === chapterId);
   const chapter = chapters[index];
   if (!chapter) {
-    app.innerHTML = `${topbar("library")}<p class="empty flash">找不到这一章</p>`;
+    app.innerHTML = `${topbar("library")}<p class="empty flash">找不到這一章</p>`;
     return;
   }
   const prev = chapters[index - 1];
@@ -168,8 +168,8 @@ async function renderRead(bookId, chapterId) {
       <h1>${escapeHtml(chapter.title)}</h1>
       <div class="prose">${paragraphs(chapter.body)}</div>
       <div class="pager">
-        ${prev ? `<a class="btn" href="#/read/${book.id}/${prev.id}">上一章</a>` : `<a class="btn" href="#/book/${book.id}">回目录</a>`}
-        ${next ? `<a class="btn btn-primary" href="#/read/${book.id}/${next.id}">下一章</a>` : `<a class="btn btn-primary" href="#/book/${book.id}">读完了</a>`}
+        ${prev ? `<a class="btn" href="#/read/${book.id}/${prev.id}">上一章</a>` : `<a class="btn" href="#/book/${book.id}">回目錄</a>`}
+        ${next ? `<a class="btn btn-primary" href="#/read/${book.id}/${next.id}">下一章</a>` : `<a class="btn btn-primary" href="#/book/${book.id}">讀完了</a>`}
       </div>
     </article>
   `;
@@ -180,14 +180,14 @@ function loginForm(message) {
     ${topbar("studio")}
     <section class="studio">
       <div class="panel" style="max-width:460px;">
-        <h2>写作室</h2>
-        <p class="muted">输入作者密码后，就可以新建书籍、写章节、选择发布给读者。</p>
+        <h2>寫作室</h2>
+        <p class="muted">輸入作者密碼後，就可以新建書籍、寫章節、選擇發布給讀者。</p>
         ${message ? `<p class="flash">${escapeHtml(message)}</p>` : ""}
         <form class="form" id="login-form">
-          <label>密码
+          <label>密碼
             <input type="password" name="password" autocomplete="current-password" required />
           </label>
-          <button class="btn btn-primary" type="submit">进入</button>
+          <button class="btn btn-primary" type="submit">進入</button>
         </form>
       </div>
     </section>
@@ -216,19 +216,19 @@ async function renderStudio() {
     <section class="studio">
       <div class="layout" style="padding:0;">
         <aside class="panel">
-          <h2>新书</h2>
+          <h2>新書</h2>
           <form class="form" id="new-book">
-            <label>书名 <input name="title" required /></label>
+            <label>書名 <input name="title" required /></label>
             <label>作者 <input name="author" value="Ra" /></label>
-            <label>一句话简介 <input name="tagline" /></label>
+            <label>一句話簡介 <input name="tagline" /></label>
             <label>封面
               <select name="cover">${covers.map(([id, label]) => `<option value="${id}">${label}</option>`).join("")}</select>
             </label>
-            <button class="btn btn-primary" type="submit">创建草稿</button>
+            <button class="btn btn-primary" type="submit">建立草稿</button>
           </form>
         </aside>
         <div class="panel">
-          <h2>我的书</h2>
+          <h2>我的書</h2>
           ${
             books.length
               ? `<ol class="chapters">${books
@@ -237,12 +237,12 @@ async function renderStudio() {
                 <li>
                   <a href="#/studio/book/${book.id}">
                     ${escapeHtml(book.title)}
-                    <span class="badge">${book.status === "published" ? "已发布" : "草稿"} · ${book.chapterCount} 章</span>
+                    <span class="badge">${book.status === "published" ? "已發布" : "草稿"} · ${book.chapterCount} 章</span>
                   </a>
                 </li>`
                   )
                   .join("")}</ol>`
-              : `<p class="muted">还没有书。左边创建一个吧。</p>`
+              : `<p class="muted">還沒有書。左邊建立一本吧。</p>`
           }
         </div>
       </div>
@@ -307,33 +307,33 @@ async function renderStudioBook(id) {
     <section class="studio">
       <div class="layout" style="padding:0;">
         <aside class="panel">
-          <p><a href="#/studio">← 全部书</a></p>
-          <h2>书籍设定</h2>
+          <p><a href="#/studio">← 全部書</a></p>
+          <h2>書籍設定</h2>
           <form class="form" id="book-form">
-            <label>书名 <input name="title" value="${escapeHtml(book.title)}" required /></label>
+            <label>書名 <input name="title" value="${escapeHtml(book.title)}" required /></label>
             <label>作者 <input name="author" value="${escapeHtml(book.author)}" /></label>
-            <label>简介 <input name="tagline" value="${escapeHtml(book.tagline || "")}" /></label>
+            <label>簡介 <input name="tagline" value="${escapeHtml(book.tagline || "")}" /></label>
             <label>封面
               <select name="cover">${covers
                 .map(([cid, label]) => `<option value="${cid}" ${cid === book.cover ? "selected" : ""}>${label}</option>`)
                 .join("")}</select>
             </label>
-            <label>状态
+            <label>狀態
               <select name="status">
-                <option value="draft" ${book.status !== "published" ? "selected" : ""}>草稿（仅作者可见）</option>
-                <option value="published" ${book.status === "published" ? "selected" : ""}>发布（读者可见）</option>
+                <option value="draft" ${book.status !== "published" ? "selected" : ""}>草稿（僅作者可見）</option>
+                <option value="published" ${book.status === "published" ? "selected" : ""}>發布（讀者可見）</option>
               </select>
             </label>
             <div class="row">
-              <button class="btn btn-primary" type="submit">保存</button>
-              <button class="btn btn-danger" id="delete-book" type="button">删除这本书</button>
+              <button class="btn btn-primary" type="submit">儲存</button>
+              <button class="btn btn-danger" id="delete-book" type="button">刪除這本書</button>
             </div>
           </form>
         </aside>
         <div class="panel">
           <div class="row" style="justify-content:space-between;">
-            <h2>章节</h2>
-            <button class="btn" id="add-chapter" type="button">新章节</button>
+            <h2>章節</h2>
+            <button class="btn" id="add-chapter" type="button">新章節</button>
           </div>
           ${
             chapters.length
@@ -345,7 +345,7 @@ async function renderStudioBook(id) {
                 </li>`
                   )
                   .join("")}</ol>`
-              : `<p class="muted">还没有章节。点右上角写第一章。</p>`
+              : `<p class="muted">還沒有章節。點右上角寫第一章。</p>`
           }
         </div>
       </div>
@@ -373,7 +373,7 @@ async function renderStudioBook(id) {
   });
 
   document.getElementById("delete-book").addEventListener("click", async () => {
-    if (!confirm("确定删除这本书和所有章节？")) return;
+    if (!confirm("確定刪除這本書和所有章節？")) return;
     try {
       await api(`/api/books/${book.id}`, { method: "DELETE" });
       location.hash = "#/studio";
@@ -386,7 +386,7 @@ async function renderStudioBook(id) {
     try {
       const created = await api(`/api/books/${book.id}/chapters`, {
         method: "POST",
-        body: JSON.stringify({ title: "新章节", body: "" }),
+        body: JSON.stringify({ title: "新章節", body: "" }),
       });
       location.hash = `#/studio/book/${book.id}/chapter/${created.chapter.id}`;
     } catch (err) {
@@ -409,7 +409,7 @@ async function renderStudioChapter(bookId, chapterId) {
   }
   const chapter = (book.chapters || []).find((item) => item.id === chapterId);
   if (!chapter) {
-    app.innerHTML = `${topbar("studio")}<p class="empty flash">找不到这一章</p>`;
+    app.innerHTML = `${topbar("studio")}<p class="empty flash">找不到這一章</p>`;
     return;
   }
 
@@ -418,16 +418,16 @@ async function renderStudioChapter(bookId, chapterId) {
     <section class="studio">
       <div class="panel editor">
         <p><a href="#/studio/book/${book.id}">← ${escapeHtml(book.title)}</a></p>
-        <h2>写这一章</h2>
+        <h2>寫這一章</h2>
         <form class="form" id="chapter-form">
-          <label>标题 <input name="title" value="${escapeHtml(chapter.title)}" /></label>
+          <label>標題 <input name="title" value="${escapeHtml(chapter.title)}" /></label>
           <label>正文
             <textarea name="body">${escapeHtml(chapter.body || "")}</textarea>
           </label>
           <div class="row">
-            <button class="btn btn-primary" type="submit">保存章节</button>
-            <button class="btn btn-danger" id="delete-chapter" type="button">删除章节</button>
-            <a class="btn" href="#/read/${book.id}/${chapter.id}">预览阅读</a>
+            <button class="btn btn-primary" type="submit">儲存章節</button>
+            <button class="btn btn-danger" id="delete-chapter" type="button">刪除章節</button>
+            <a class="btn" href="#/read/${book.id}/${chapter.id}">預覽閱讀</a>
           </div>
         </form>
       </div>
@@ -445,14 +445,14 @@ async function renderStudioChapter(bookId, chapterId) {
           body: form.get("body"),
         }),
       });
-      alert("已保存");
+      alert("已儲存");
     } catch (err) {
       alert(err.message);
     }
   });
 
   document.getElementById("delete-chapter").addEventListener("click", async () => {
-    if (!confirm("删除这一章？")) return;
+    if (!confirm("刪除這一章？")) return;
     try {
       await api(`/api/books/${book.id}/chapters/${chapter.id}`, { method: "DELETE" });
       location.hash = `#/studio/book/${book.id}`;
