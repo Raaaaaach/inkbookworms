@@ -1,0 +1,6 @@
+.DS_Store
+.env
+*.tmp
+bin/cloudflared
+bin/gh
+data/*.tmp
