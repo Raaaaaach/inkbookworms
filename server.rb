@@ -11,12 +11,14 @@ require "time"
 module Bookworms
   module ReadBody
     def send_body_io(socket)
+      return super unless @body.respond_to?(:read)
+
       begin
         while (chunk = @body.read(16_384))
           socket.write(chunk)
         end
       ensure
-        @body.close
+        @body.close if @body.respond_to?(:close)
       end
     end
   end
@@ -97,6 +99,12 @@ server = WEBrick::HTTPServer.new(
   AccessLog: [],
   Logger: WEBrick::Log.new($stderr, WEBrick::Log::INFO)
 )
+
+server.mount_proc "/healthz" do |_req, res|
+  res.status = 200
+  res["Content-Type"] = "text/plain; charset=utf-8"
+  res.body = "ok"
+end
 
 server.mount_proc "/api" do |req, res|
   path = req.path_info.to_s.sub(%r{\A/}, "")

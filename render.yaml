@@ -3,7 +3,7 @@ services:
     name: inkbookworms
     runtime: docker
     plan: free
-    healthCheckPath: /
+    healthCheckPath: /healthz
     envVars:
       - key: BIND
         value: 0.0.0.0
