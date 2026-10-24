@@ -59,7 +59,7 @@ function topbar(active) {
   return `
     <header class="topbar">
       <a class="brand" href="#/">
-        <strong>Bookworms</strong>
+        <strong>Ink Bookworms</strong>
         <span>写给愿意停下来的人</span>
       </a>
       <nav class="nav">
