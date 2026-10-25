@@ -75,7 +75,27 @@ button {
 
 .nav {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
+}
+
+.friend-line {
+  margin: 16px 0 0;
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+.friend-line.row {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.studio h3 {
+  font-family: var(--serif);
+  font-weight: 500;
+  margin: 22px 0 8px;
 }
 
 .nav a,

@@ -1,5 +1,7 @@
 const app = document.getElementById("app");
 const PASS_KEY = "bookworms.password";
+const READER_KEY = "bookworms.reader";
+let meCache = { reader: null, friendStatus: "none", authorName: "JC" };
 
 const covers = [
   ["sunset", "日落"],
@@ -36,11 +38,38 @@ function password() {
   return sessionStorage.getItem(PASS_KEY) || "";
 }
 
+function readerSession() {
+  try {
+    return JSON.parse(sessionStorage.getItem(READER_KEY) || "null");
+  } catch (err) {
+    return null;
+  }
+}
+
+function setReaderSession(data) {
+  if (!data) sessionStorage.removeItem(READER_KEY);
+  else sessionStorage.setItem(READER_KEY, JSON.stringify(data));
+}
+
 function headers(extra) {
   const result = { "Content-Type": "application/json", ...(extra || {}) };
   const secret = password();
   if (secret) result["X-Author-Password"] = secret;
+  const token = readerSession()?.token;
+  if (token) result["X-Reader-Token"] = token;
   return result;
+}
+
+async function ensureMe() {
+  try {
+    meCache = await api("/api/me");
+    if (meCache.reader && readerSession()?.token) {
+      setReaderSession({ token: readerSession().token, name: meCache.reader.name });
+    }
+  } catch (err) {
+    meCache = { reader: null, friendStatus: "none", authorName: "JC" };
+  }
+  return meCache;
 }
 
 async function api(path, options = {}) {
@@ -55,6 +84,45 @@ async function api(path, options = {}) {
   return data;
 }
 
+function statusLabel(status) {
+  if (status === "published") return "已發布";
+  if (status === "friends") return "朋友可見";
+  return "草稿";
+}
+
+function friendLine() {
+  const author = meCache.authorName || "JC";
+  if (!meCache.reader) {
+    return `<p class="friend-line">登入後可以向作者 ${escapeHtml(author)} 申請成為朋友。</p>`;
+  }
+  if (meCache.friendStatus === "accepted") {
+    return `<p class="friend-line">你已是 ${escapeHtml(author)} 的朋友，朋友可見的書也會出現在這裡。</p>`;
+  }
+  if (meCache.friendStatus === "pending") {
+    return `<p class="friend-line">已向 ${escapeHtml(author)} 送出申請，等待作者同意。</p>`;
+  }
+  return `
+    <div class="friend-line row">
+      <p>向作者 ${escapeHtml(author)} 申請成為朋友，同意後就能看到朋友可見的書。</p>
+      <button class="btn" id="ask-friend" type="button">加為朋友</button>
+    </div>
+  `;
+}
+
+function bindFriendButton() {
+  const button = document.getElementById("ask-friend");
+  if (!button) return;
+  button.addEventListener("click", async () => {
+    try {
+      await api("/api/friends", { method: "POST", body: JSON.stringify({}) });
+      await ensureMe();
+      render();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+}
+
 function topbar(active) {
   return `
     <header class="topbar">
@@ -65,6 +133,9 @@ function topbar(active) {
       <nav class="nav">
         <a class="${active === "library" ? "active" : ""}" href="#/">書庫</a>
         <a class="${active === "studio" ? "active" : ""}" href="#/studio">寫作室</a>
+        <a class="${active === "account" ? "active" : ""}" href="#/account">${
+          meCache.reader ? escapeHtml(meCache.reader.name) : "登入"
+        }</a>
       </nav>
     </header>
   `;
@@ -84,6 +155,7 @@ async function renderLibrary() {
     <section class="hero">
       <h1>有人寫，有人讀。</h1>
       <p>作者在寫作室寫下章節，發布之後，讀者就能在這裡翻開。先從下面<span class="nowrap">這本樣書開始。</span></p>
+      ${friendLine()}
     </section>
     ${error ? `<p class="empty flash">${escapeHtml(error)}</p>` : ""}
     ${
@@ -100,9 +172,14 @@ async function renderLibrary() {
             </a>`
             )
             .join("")}</section>`
-        : `<p class="empty">書庫還是空的。作者可以到寫作室發布第一本書。</p>`
+        : `<p class="empty">${
+            meCache.friendStatus === "accepted"
+              ? "目前還沒有你可以看的書。"
+              : "書庫還是空的。作者可以到寫作室發布第一本書。"
+          }</p>`
     }
   `;
+  bindFriendButton();
 }
 
 async function renderBook(id) {
@@ -120,8 +197,9 @@ async function renderBook(id) {
     <section class="layout">
       <aside class="panel">
         <div class="cover ${escapeHtml(book.cover || "ink")}" style="height:180px;border-radius:14px;">${escapeHtml(book.title)}</div>
-        <p class="muted" style="margin-top:16px;">${escapeHtml(book.author)}</p>
+        <p class="muted" style="margin-top:16px;">作者 ${escapeHtml(book.author)}</p>
         <p>${escapeHtml(book.tagline || "")}</p>
+        ${friendLine()}
       </aside>
       <div class="panel">
         <h2>目錄</h2>
@@ -141,6 +219,7 @@ async function renderBook(id) {
       </div>
     </section>
   `;
+  bindFriendButton();
 }
 
 async function renderRead(bookId, chapterId) {
@@ -181,7 +260,7 @@ function loginForm(message) {
     <section class="studio">
       <div class="panel" style="max-width:460px;">
         <h2>寫作室</h2>
-        <p class="muted">輸入作者密碼後，就可以新建書籍、寫章節、選擇發布給讀者。</p>
+        <p class="muted">輸入作者密碼後，就可以新建書籍、寫章節，並選擇草稿、朋友可見或公開發布。</p>
         ${message ? `<p class="flash">${escapeHtml(message)}</p>` : ""}
         <form class="form" id="login-form">
           <label>密碼
@@ -202,14 +281,19 @@ async function renderStudio() {
   }
 
   let books = [];
+  let friends = [];
   try {
     books = (await api("/api/books")).books;
+    friends = (await api("/api/friends")).friends;
   } catch (err) {
     sessionStorage.removeItem(PASS_KEY);
     app.innerHTML = loginForm(err.message);
     bindLogin();
     return;
   }
+
+  const pending = friends.filter((item) => item.status === "pending");
+  const accepted = friends.filter((item) => item.status === "accepted");
 
   app.innerHTML = `
     ${topbar("studio")}
@@ -237,7 +321,7 @@ async function renderStudio() {
                 <li>
                   <a href="#/studio/book/${book.id}">
                     ${escapeHtml(book.title)}
-                    <span class="badge">${book.status === "published" ? "已發布" : "草稿"} · ${book.chapterCount} 章</span>
+                    <span class="badge">${statusLabel(book.status)} · ${book.chapterCount} 章</span>
                   </a>
                 </li>`
                   )
@@ -246,8 +330,62 @@ async function renderStudio() {
           }
         </div>
       </div>
+      <div class="panel" style="margin-top:22px;">
+        <h2>朋友申請</h2>
+        <p class="muted">讀者登入後可以申請加你為朋友。你同意後，他們就能看到「朋友可見」的書。</p>
+        ${
+          pending.length
+            ? `<ol class="chapters">${pending
+                .map(
+                  (item) => `
+              <li class="row" style="justify-content:space-between;align-items:center;">
+                <span>${escapeHtml(item.readerName)}</span>
+                <span class="row">
+                  <button class="btn btn-primary" data-accept="${item.id}" type="button">同意</button>
+                  <button class="btn" data-reject="${item.id}" type="button">拒絕</button>
+                </span>
+              </li>`
+                )
+                .join("")}</ol>`
+            : `<p class="muted">現在沒有待處理的申請。</p>`
+        }
+        ${
+          accepted.length
+            ? `<p class="muted" style="margin-top:18px;">已是朋友：${accepted
+                .map((item) => escapeHtml(item.readerName))
+                .join("、")}</p>`
+            : ""
+        }
+      </div>
     </section>
   `;
+
+  document.querySelectorAll("[data-accept]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await api(`/api/friends/${button.getAttribute("data-accept")}/accept`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+        render();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+  document.querySelectorAll("[data-reject]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await api(`/api/friends/${button.getAttribute("data-reject")}/reject`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+        render();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
 
   document.getElementById("new-book").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -320,10 +458,12 @@ async function renderStudioBook(id) {
             </label>
             <label>狀態
               <select name="status">
-                <option value="draft" ${book.status !== "published" ? "selected" : ""}>草稿（僅作者可見）</option>
+                <option value="draft" ${book.status === "draft" || !book.status ? "selected" : ""}>草稿（僅作者可見）</option>
+                <option value="friends" ${book.status === "friends" ? "selected" : ""}>發布（朋友可見）</option>
                 <option value="published" ${book.status === "published" ? "selected" : ""}>發布（讀者可見）</option>
               </select>
             </label>
+            <p class="muted">朋友可見只會出現在你已同意的朋友書庫裡，不會公開給所有讀者。</p>
             <div class="row">
               <button class="btn btn-primary" type="submit">儲存</button>
               <button class="btn btn-danger" id="delete-book" type="button">刪除這本書</button>
@@ -462,9 +602,93 @@ async function renderStudioChapter(bookId, chapterId) {
   });
 }
 
+async function renderAccount() {
+  const author = meCache.authorName || "JC";
+  app.innerHTML = `
+    ${topbar("account")}
+    <section class="studio">
+      <div class="panel" style="max-width:460px;">
+        <h2>${meCache.reader ? escapeHtml(meCache.reader.name) : "讀者登入"}</h2>
+        ${
+          meCache.reader
+            ? `
+          <p class="muted">登入後可以向作者 ${escapeHtml(author)} 申請成為朋友。</p>
+          ${friendLine()}
+          <div class="row" style="margin-top:18px;">
+            <button class="btn" id="logout-reader" type="button">登出</button>
+          </div>
+        `
+            : `
+          <p class="muted">用名字登入後，就能向作者申請加為朋友。作者同意後，你的書庫會多出朋友可見的書。</p>
+          <h3>登入</h3>
+          <form class="form" id="reader-login">
+            <label>名字 <input name="name" required /></label>
+            <label>密碼 <input type="password" name="password" required /></label>
+            <button class="btn btn-primary" type="submit">登入</button>
+          </form>
+          <h3>還沒有帳號</h3>
+          <form class="form" id="reader-register">
+            <label>名字 <input name="name" required minlength="2" maxlength="20" /></label>
+            <label>密碼 <input type="password" name="password" required minlength="4" /></label>
+            <button class="btn" type="submit">註冊</button>
+          </form>
+        `
+        }
+      </div>
+    </section>
+  `;
+  bindFriendButton();
+  const logout = document.getElementById("logout-reader");
+  if (logout) {
+    logout.addEventListener("click", () => {
+      setReaderSession(null);
+      meCache = { reader: null, friendStatus: "none", authorName: author };
+      render();
+    });
+  }
+  const login = document.getElementById("reader-login");
+  if (login) {
+    login.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      try {
+        const data = await api("/api/readers/login", {
+          method: "POST",
+          body: JSON.stringify({ name: form.get("name"), password: form.get("password") }),
+        });
+        setReaderSession({ token: data.token, name: data.reader.name });
+        await ensureMe();
+        location.hash = "#/";
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  }
+  const register = document.getElementById("reader-register");
+  if (register) {
+    register.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      try {
+        const data = await api("/api/readers", {
+          method: "POST",
+          body: JSON.stringify({ name: form.get("name"), password: form.get("password") }),
+        });
+        setReaderSession({ token: data.token, name: data.reader.name });
+        await ensureMe();
+        location.hash = "#/";
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  }
+}
+
 async function render() {
+  await ensureMe();
   const { parts } = route();
   if (parts.length === 0) return renderLibrary();
+  if (parts[0] === "account") return renderAccount();
   if (parts[0] === "book" && parts[1]) return renderBook(parts[1]);
   if (parts[0] === "read" && parts[1] && parts[2]) return renderRead(parts[1], parts[2]);
   if (parts[0] === "studio" && parts[1] === "book" && parts[2] && parts[3] === "chapter" && parts[4]) {
