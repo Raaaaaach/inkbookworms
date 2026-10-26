@@ -1,7 +1,8 @@
 const app = document.getElementById("app");
-const PASS_KEY = "bookworms.password";
+const AUTHOR_KEY = "bookworms.author";
 const READER_KEY = "bookworms.reader";
 let meCache = { reader: null, friendStatus: "none", authorName: "JC" };
+let authorCache = null;
 
 const covers = [
   ["sunset", "日落"],
@@ -34,8 +35,17 @@ function paragraphs(text) {
   return chunks.map((chunk) => `<p>${escapeHtml(chunk).replace(/\n/g, "<br>")}</p>`).join("");
 }
 
-function password() {
-  return sessionStorage.getItem(PASS_KEY) || "";
+function authorSession() {
+  try {
+    return JSON.parse(sessionStorage.getItem(AUTHOR_KEY) || "null");
+  } catch (err) {
+    return null;
+  }
+}
+
+function setAuthorSession(data) {
+  if (!data) sessionStorage.removeItem(AUTHOR_KEY);
+  else sessionStorage.setItem(AUTHOR_KEY, JSON.stringify(data));
 }
 
 function readerSession() {
@@ -53,11 +63,15 @@ function setReaderSession(data) {
 
 function headers(extra) {
   const result = { "Content-Type": "application/json", ...(extra || {}) };
-  const secret = password();
-  if (secret) result["X-Author-Password"] = secret;
+  const authorToken = authorSession()?.token;
+  if (authorToken) result["X-Author-Token"] = authorToken;
   const token = readerSession()?.token;
   if (token) result["X-Reader-Token"] = token;
   return result;
+}
+
+function basicEmailOk(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 }
 
 async function ensureMe() {
@@ -70,6 +84,23 @@ async function ensureMe() {
     meCache = { reader: null, friendStatus: "none", authorName: "JC" };
   }
   return meCache;
+}
+
+async function ensureAuthor() {
+  if (!authorSession()?.token) {
+    authorCache = null;
+    return null;
+  }
+  try {
+    const data = await api("/api/authors/me");
+    authorCache = data.author || null;
+    if (!authorCache) setAuthorSession(null);
+    else setAuthorSession({ token: authorSession().token, name: authorCache.name });
+  } catch (err) {
+    authorCache = null;
+    setAuthorSession(null);
+  }
+  return authorCache;
 }
 
 async function api(path, options = {}) {
@@ -380,56 +411,199 @@ async function renderRead(bookId, chapterId) {
   bindDiscussion(book.id, chapter.id);
 }
 
-function loginForm(message) {
+function studioGate(message, hint) {
   return `
     ${topbar("studio")}
     <section class="studio">
       <div class="panel" style="max-width:460px;">
         <h2>寫作室</h2>
-        <p class="muted">輸入作者密碼後，就可以新建書籍、寫章節，並選擇草稿、朋友可見或公開發布。</p>
+        <p class="muted">每位作者用自己的帳號登入。註冊需名字、電子信箱（必填）、電話（選填）與密碼，並完成驗證碼——適合 9–18 歲年輕作者在網站上寫作與發布。</p>
         ${message ? `<p class="flash">${escapeHtml(message)}</p>` : ""}
-        <form class="form" id="login-form">
-          <label>密碼
-            <input type="password" name="password" autocomplete="current-password" required />
+        ${hint ? `<p class="muted">${escapeHtml(hint)}</p>` : ""}
+        <h3>登入</h3>
+        <form class="form" id="author-login">
+          <label>電子信箱或電話
+            <input name="login" required autocomplete="username" placeholder="邮箱或电话" />
           </label>
-          <button class="btn btn-primary" type="submit">進入</button>
+          <label>密碼 <input type="password" name="password" required autocomplete="current-password" /></label>
+          <button class="btn btn-primary" type="submit">進入寫作室</button>
+        </form>
+        <h3>還沒有作者帳號</h3>
+        <form class="form" id="author-register">
+          <label>名字（顯示用） <input name="name" required minlength="2" maxlength="20" autocomplete="nickname" /></label>
+          <label>電子信箱 <input type="email" name="email" required autocomplete="email" placeholder="you@example.com" /></label>
+          <label>電話（選填） <input name="phone" inputmode="tel" autocomplete="tel" placeholder="可留空" /></label>
+          <label>密碼 <input type="password" name="password" required minlength="4" autocomplete="new-password" /></label>
+          <div class="row" style="align-items:flex-end;">
+            <label style="flex:1;">驗證碼
+              <input name="code" required inputmode="numeric" autocomplete="one-time-code" placeholder="6 位驗證碼" />
+            </label>
+            <button class="btn" id="author-send-code" type="button">发送验证码</button>
+          </div>
+          <button class="btn btn-primary" type="submit">驗證並註冊</button>
         </form>
       </div>
     </section>
   `;
 }
 
+function registerPayloadFromForm(form) {
+  return {
+    name: String(form.get("name") || "").trim(),
+    email: String(form.get("email") || "").trim(),
+    phone: String(form.get("phone") || "").trim(),
+    password: String(form.get("password") || ""),
+    code: String(form.get("code") || "").trim(),
+  };
+}
+
+function validateRegisterClient(fields) {
+  if (!fields.email) return "請填寫電子信箱";
+  if (!basicEmailOk(fields.email)) return "電子信箱格式不正確";
+  if (fields.phone && !/^\+?[\d\s\-().]{8,20}$/.test(fields.phone)) {
+    return "電話格式不正確（選填；若填寫請檢查位數）";
+  }
+  if (!fields.password || fields.password.length < 4) return "密碼至少 4 個字";
+  return "";
+}
+
+function bindStudioGate() {
+  const login = document.getElementById("author-login");
+  if (login) {
+    login.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      try {
+        const data = await api("/api/authors/login", {
+          method: "POST",
+          body: JSON.stringify({ login: form.get("login"), password: form.get("password") }),
+        });
+        setAuthorSession({ token: data.token, name: data.author.name });
+        authorCache = data.author;
+        render();
+      } catch (err) {
+        app.innerHTML = studioGate(err.message);
+        bindStudioGate();
+      }
+    });
+  }
+
+  const sendCode = document.getElementById("author-send-code");
+  if (sendCode) {
+    sendCode.addEventListener("click", async () => {
+      const formEl = document.getElementById("author-register");
+      const form = new FormData(formEl);
+      const fields = registerPayloadFromForm(form);
+      const clientError = validateRegisterClient({ ...fields, password: fields.password || "****" });
+      if (clientError && clientError !== "密碼至少 4 個字") {
+        app.innerHTML = studioGate(clientError);
+        bindStudioGate();
+        return;
+      }
+      if (!fields.email || !basicEmailOk(fields.email)) {
+        app.innerHTML = studioGate(!fields.email ? "請填寫電子信箱" : "電子信箱格式不正確");
+        bindStudioGate();
+        return;
+      }
+      sendCode.disabled = true;
+      try {
+        const data = await api("/api/verify/send", {
+          method: "POST",
+          body: JSON.stringify({
+            role: "author",
+            email: fields.email,
+            phone: fields.phone,
+          }),
+        });
+        const hint = data.devCode
+          ? `本地測試：驗證碼是 ${data.devCode}（也會印在伺服器日誌）。`
+          : "驗證碼已發送，請查收後填入。";
+        app.innerHTML = studioGate("驗證碼已送出", hint);
+        bindStudioGate();
+        const again = document.getElementById("author-register");
+        if (again) {
+          again.name.value = fields.name;
+          again.email.value = fields.email;
+          again.phone.value = fields.phone;
+          again.password.value = fields.password;
+        }
+      } catch (err) {
+        app.innerHTML = studioGate(err.message);
+        bindStudioGate();
+      }
+    });
+  }
+
+  const register = document.getElementById("author-register");
+  if (!register) return;
+  register.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const fields = registerPayloadFromForm(form);
+    const clientError = validateRegisterClient(fields);
+    if (clientError) {
+      app.innerHTML = studioGate(clientError);
+      bindStudioGate();
+      return;
+    }
+    if (!fields.code) {
+      app.innerHTML = studioGate("請填寫驗證碼（先點「发送验证码」）");
+      bindStudioGate();
+      return;
+    }
+    try {
+      const data = await api("/api/authors", {
+        method: "POST",
+        body: JSON.stringify(fields),
+      });
+      setAuthorSession({ token: data.token, name: data.author.name });
+      authorCache = data.author;
+      render();
+    } catch (err) {
+      app.innerHTML = studioGate(err.message);
+      bindStudioGate();
+    }
+  });
+}
+
 async function renderStudio() {
-  if (!password()) {
-    app.innerHTML = loginForm("");
-    bindLogin();
+  await ensureAuthor();
+  if (!authorCache) {
+    app.innerHTML = studioGate("");
+    bindStudioGate();
     return;
   }
 
   let books = [];
   let friends = [];
   try {
-    books = (await api("/api/books")).books;
+    books = (await api("/api/authors/books")).books;
     friends = (await api("/api/friends")).friends;
   } catch (err) {
-    sessionStorage.removeItem(PASS_KEY);
-    app.innerHTML = loginForm(err.message);
-    bindLogin();
+    setAuthorSession(null);
+    authorCache = null;
+    app.innerHTML = studioGate(err.message);
+    bindStudioGate();
     return;
   }
 
   const pending = friends.filter((item) => item.status === "pending");
   const accepted = friends.filter((item) => item.status === "accepted");
+  const authorName = authorCache.name || "作者";
 
   app.innerHTML = `
     ${topbar("studio")}
     <section class="studio">
+      <div class="row" style="justify-content:space-between;margin:0 0 16px;padding:0 2px;">
+        <p class="muted" style="margin:0;">你好，${escapeHtml(authorName)}。這裡只顯示你自己的書。</p>
+        <button class="btn" id="logout-author" type="button">登出寫作室</button>
+      </div>
       <div class="layout" style="padding:0;">
         <aside class="panel">
           <h2>新書</h2>
           <form class="form" id="new-book">
             <label>書名 <input name="title" required /></label>
-            <label>作者 <input name="author" value="JC" /></label>
+            <label>作者 <input name="author" value="${escapeHtml(authorName)}" /></label>
             <label>一句話簡介 <input name="tagline" /></label>
             <label>封面
               <select name="cover">${covers.map(([id, label]) => `<option value="${id}">${label}</option>`).join("")}</select>
@@ -486,6 +660,15 @@ async function renderStudio() {
     </section>
   `;
 
+  const logout = document.getElementById("logout-author");
+  if (logout) {
+    logout.addEventListener("click", () => {
+      setAuthorSession(null);
+      authorCache = null;
+      render();
+    });
+  }
+
   document.querySelectorAll("[data-accept]").forEach((button) => {
     button.addEventListener("click", async () => {
       try {
@@ -534,26 +717,9 @@ async function renderStudio() {
   });
 }
 
-function bindLogin() {
-  document.getElementById("login-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const value = new FormData(event.target).get("password");
-    try {
-      await api("/api/auth", {
-        method: "POST",
-        body: JSON.stringify({ password: value }),
-      });
-      sessionStorage.setItem(PASS_KEY, String(value));
-      render();
-    } catch (err) {
-      app.innerHTML = loginForm(err.message);
-      bindLogin();
-    }
-  });
-}
-
 async function renderStudioBook(id) {
-  if (!password()) {
+  await ensureAuthor();
+  if (!authorCache) {
     location.hash = "#/studio";
     return;
   }
@@ -662,7 +828,8 @@ async function renderStudioBook(id) {
 }
 
 async function renderStudioChapter(bookId, chapterId) {
-  if (!password()) {
+  await ensureAuthor();
+  if (!authorCache) {
     location.hash = "#/studio";
     return;
   }
@@ -745,18 +912,30 @@ async function renderAccount() {
           </div>
         `
             : `
-          <p class="muted">用名字登入後，就能在章節下方按讚與留言，也可以向作者申請加為朋友。作者同意後，你的書庫會多出朋友可見的書。</p>
+          <p class="muted">登入後就能在章節下方按讚與留言，也可以向作者申請加為朋友。註冊需電子信箱（必填）、電話（選填）與驗證碼。作者同意後，你的書庫會多出朋友可見的書。</p>
+          <p id="account-flash" class="flash" hidden></p>
+          <p id="account-hint" class="muted" hidden></p>
           <h3>登入</h3>
           <form class="form" id="reader-login">
-            <label>名字 <input name="name" required /></label>
-            <label>密碼 <input type="password" name="password" required /></label>
+            <label>電子信箱或電話
+              <input name="login" required autocomplete="username" placeholder="邮箱或电话" />
+            </label>
+            <label>密碼 <input type="password" name="password" required autocomplete="current-password" /></label>
             <button class="btn btn-primary" type="submit">登入</button>
           </form>
           <h3>還沒有帳號</h3>
           <form class="form" id="reader-register">
-            <label>名字 <input name="name" required minlength="2" maxlength="20" /></label>
-            <label>密碼 <input type="password" name="password" required minlength="4" /></label>
-            <button class="btn" type="submit">註冊</button>
+            <label>名字（顯示用） <input name="name" required minlength="2" maxlength="20" autocomplete="nickname" /></label>
+            <label>電子信箱 <input type="email" name="email" required autocomplete="email" placeholder="you@example.com" /></label>
+            <label>電話（選填） <input name="phone" inputmode="tel" autocomplete="tel" placeholder="可留空" /></label>
+            <label>密碼 <input type="password" name="password" required minlength="4" autocomplete="new-password" /></label>
+            <div class="row" style="align-items:flex-end;">
+              <label style="flex:1;">驗證碼
+                <input name="code" required inputmode="numeric" autocomplete="one-time-code" placeholder="6 位驗證碼" />
+              </label>
+              <button class="btn" id="reader-send-code" type="button">发送验证码</button>
+            </div>
+            <button class="btn" type="submit">驗證並註冊</button>
           </form>
         `
         }
@@ -772,6 +951,19 @@ async function renderAccount() {
       render();
     });
   }
+  const showAccountMessage = (message, hint) => {
+    const flash = document.getElementById("account-flash");
+    const hintEl = document.getElementById("account-hint");
+    if (flash) {
+      flash.hidden = !message;
+      flash.textContent = message || "";
+    }
+    if (hintEl) {
+      hintEl.hidden = !hint;
+      hintEl.textContent = hint || "";
+    }
+  };
+
   const login = document.getElementById("reader-login");
   if (login) {
     login.addEventListener("submit", async (event) => {
@@ -780,31 +972,80 @@ async function renderAccount() {
       try {
         const data = await api("/api/readers/login", {
           method: "POST",
-          body: JSON.stringify({ name: form.get("name"), password: form.get("password") }),
+          body: JSON.stringify({ login: form.get("login"), password: form.get("password") }),
         });
         setReaderSession({ token: data.token, name: data.reader.name });
         await ensureMe();
         location.hash = "#/";
       } catch (err) {
-        alert(err.message);
+        showAccountMessage(err.message);
       }
     });
   }
+
+  const sendCode = document.getElementById("reader-send-code");
+  if (sendCode) {
+    sendCode.addEventListener("click", async () => {
+      const formEl = document.getElementById("reader-register");
+      const fields = registerPayloadFromForm(new FormData(formEl));
+      if (!fields.email) {
+        showAccountMessage("請填寫電子信箱");
+        return;
+      }
+      if (!basicEmailOk(fields.email)) {
+        showAccountMessage("電子信箱格式不正確");
+        return;
+      }
+      if (fields.phone && !/^\+?[\d\s\-().]{8,20}$/.test(fields.phone)) {
+        showAccountMessage("電話格式不正確（選填；若填寫請檢查位數）");
+        return;
+      }
+      sendCode.disabled = true;
+      try {
+        const data = await api("/api/verify/send", {
+          method: "POST",
+          body: JSON.stringify({
+            role: "reader",
+            email: fields.email,
+            phone: fields.phone,
+          }),
+        });
+        const hint = data.devCode
+          ? `本地測試：驗證碼是 ${data.devCode}（也會印在伺服器日誌）。`
+          : "驗證碼已發送，請查收後填入。";
+        showAccountMessage("驗證碼已送出", hint);
+      } catch (err) {
+        showAccountMessage(err.message);
+      } finally {
+        sendCode.disabled = false;
+      }
+    });
+  }
+
   const register = document.getElementById("reader-register");
   if (register) {
     register.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const form = new FormData(event.target);
+      const fields = registerPayloadFromForm(new FormData(event.target));
+      const clientError = validateRegisterClient(fields);
+      if (clientError) {
+        showAccountMessage(clientError);
+        return;
+      }
+      if (!fields.code) {
+        showAccountMessage("請填寫驗證碼（先點「发送验证码」）");
+        return;
+      }
       try {
         const data = await api("/api/readers", {
           method: "POST",
-          body: JSON.stringify({ name: form.get("name"), password: form.get("password") }),
+          body: JSON.stringify(fields),
         });
         setReaderSession({ token: data.token, name: data.reader.name });
         await ensureMe();
         location.hash = "#/";
       } catch (err) {
-        alert(err.message);
+        showAccountMessage(err.message);
       }
     });
   }
