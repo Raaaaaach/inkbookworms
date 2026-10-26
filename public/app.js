@@ -154,7 +154,7 @@ async function renderLibrary() {
     ${topbar("library")}
     <section class="hero">
       <h1>有人寫，有人讀。</h1>
-      <p>作者在寫作室寫下章節，發布之後，讀者就能在這裡翻開。先從下面<span class="nowrap">這本樣書開始。</span></p>
+      <p>給 9–18 歲年輕作者的寫作與閱讀網站。作者在寫作室寫下章節，發布後讀者就能在這裡翻開，並在正文下方按讚、留言討論。先從下面<span class="nowrap">這本樣書開始。</span></p>
       ${friendLine()}
     </section>
     ${error ? `<p class="empty flash">${escapeHtml(error)}</p>` : ""}
@@ -222,8 +222,127 @@ async function renderBook(id) {
   bindFriendButton();
 }
 
+function formatCommentTime(value) {
+  const stamp = Date.parse(value || "");
+  if (Number.isNaN(stamp)) return "";
+  try {
+    return new Intl.DateTimeFormat("zh-Hant", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(stamp));
+  } catch (err) {
+    return "";
+  }
+}
+
+function renderCommentsList(comments) {
+  if (!comments.length) {
+    return `<p class="muted discussion-empty">還沒有留言。讀完有想法，就留一句給作者吧。</p>`;
+  }
+  return `<ol class="comment-list">${comments
+    .map(
+      (comment) => `
+    <li class="comment">
+      <div class="comment-meta">
+        <strong>${escapeHtml(comment.readerName)}</strong>
+        <span>${escapeHtml(formatCommentTime(comment.createdAt))}</span>
+      </div>
+      <p>${escapeHtml(comment.body).replace(/\n/g, "<br>")}</p>
+    </li>`
+    )
+    .join("")}</ol>`;
+}
+
+function discussionMarkup(engagement) {
+  const liked = engagement.liked;
+  const likeCount = engagement.likeCount || 0;
+  const comments = engagement.comments || [];
+  const loggedIn = Boolean(meCache.reader);
+
+  return `
+    <section class="discussion" aria-label="章節討論">
+      <div class="discussion-actions row">
+        <button class="btn ${liked ? "btn-primary" : ""}" id="toggle-like" type="button" ${
+          loggedIn ? "" : "disabled"
+        }>
+          ${liked ? "已按讚" : "按讚"} · ${likeCount}
+        </button>
+        ${
+          loggedIn
+            ? `<p class="muted discussion-hint">留言會出現在正文下方，不會改動作者的文字。</p>`
+            : `<p class="muted discussion-hint"><a href="#/account">登入</a> 後可以按讚與留言。</p>`
+        }
+      </div>
+      <div class="discussion-comments">
+        <h2>留言 ${comments.length ? `· ${comments.length}` : ""}</h2>
+        <div id="comment-list">${renderCommentsList(comments)}</div>
+        ${
+          loggedIn
+            ? `
+          <form class="form comment-form" id="comment-form">
+            <label>寫下你的想法
+              <textarea name="body" maxlength="1000" rows="4" required placeholder="這一章讓你想到什麼？"></textarea>
+            </label>
+            <button class="btn btn-primary" type="submit">送出留言</button>
+          </form>`
+            : ""
+        }
+      </div>
+    </section>
+  `;
+}
+
+function bindDiscussion(bookId, chapterId) {
+  const likeButton = document.getElementById("toggle-like");
+  if (likeButton && !likeButton.disabled) {
+    likeButton.addEventListener("click", async () => {
+      likeButton.disabled = true;
+      try {
+        const data = await api(`/api/books/${bookId}/chapters/${chapterId}/like`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+        const section = document.querySelector(".discussion");
+        if (section) {
+          section.outerHTML = discussionMarkup(data);
+          bindDiscussion(bookId, chapterId);
+        }
+      } catch (err) {
+        alert(err.message);
+        likeButton.disabled = false;
+      }
+    });
+  }
+
+  const form = document.getElementById("comment-form");
+  if (!form) return;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const body = new FormData(event.target).get("body");
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    try {
+      const data = await api(`/api/books/${bookId}/chapters/${chapterId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      });
+      const section = document.querySelector(".discussion");
+      if (section) {
+        section.outerHTML = discussionMarkup(data);
+        bindDiscussion(bookId, chapterId);
+      }
+    } catch (err) {
+      alert(err.message);
+      if (submit) submit.disabled = false;
+    }
+  });
+}
+
 async function renderRead(bookId, chapterId) {
   let book;
+  let engagement = { likeCount: 0, liked: false, comments: [] };
   try {
     book = (await api(`/api/books/${bookId}`)).book;
   } catch (err) {
@@ -237,6 +356,11 @@ async function renderRead(bookId, chapterId) {
     app.innerHTML = `${topbar("library")}<p class="empty flash">找不到這一章</p>`;
     return;
   }
+  try {
+    engagement = await api(`/api/books/${bookId}/chapters/${chapterId}/engagement`);
+  } catch (err) {
+    engagement = { likeCount: 0, liked: false, comments: [] };
+  }
   const prev = chapters[index - 1];
   const next = chapters[index + 1];
 
@@ -246,12 +370,14 @@ async function renderRead(bookId, chapterId) {
       <div class="kicker">${escapeHtml(book.title)} · 第 ${index + 1} / ${chapters.length} 章</div>
       <h1>${escapeHtml(chapter.title)}</h1>
       <div class="prose">${paragraphs(chapter.body)}</div>
+      ${discussionMarkup(engagement)}
       <div class="pager">
         ${prev ? `<a class="btn" href="#/read/${book.id}/${prev.id}">上一章</a>` : `<a class="btn" href="#/book/${book.id}">回目錄</a>`}
         ${next ? `<a class="btn btn-primary" href="#/read/${book.id}/${next.id}">下一章</a>` : `<a class="btn btn-primary" href="#/book/${book.id}">讀完了</a>`}
       </div>
     </article>
   `;
+  bindDiscussion(book.id, chapter.id);
 }
 
 function loginForm(message) {
@@ -612,14 +738,14 @@ async function renderAccount() {
         ${
           meCache.reader
             ? `
-          <p class="muted">登入後可以向作者 ${escapeHtml(author)} 申請成為朋友。</p>
+          <p class="muted">登入後可以在章節下方按讚、留言，也可以向作者 ${escapeHtml(author)} 申請成為朋友。</p>
           ${friendLine()}
           <div class="row" style="margin-top:18px;">
             <button class="btn" id="logout-reader" type="button">登出</button>
           </div>
         `
             : `
-          <p class="muted">用名字登入後，就能向作者申請加為朋友。作者同意後，你的書庫會多出朋友可見的書。</p>
+          <p class="muted">用名字登入後，就能在章節下方按讚與留言，也可以向作者申請加為朋友。作者同意後，你的書庫會多出朋友可見的書。</p>
           <h3>登入</h3>
           <form class="form" id="reader-login">
             <label>名字 <input name="name" required /></label>

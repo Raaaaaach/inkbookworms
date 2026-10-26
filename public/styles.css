@@ -308,6 +308,83 @@ button {
   margin-top: 36px;
 }
 
+.discussion {
+  margin-top: 40px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.discussion-actions {
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.discussion-hint {
+  margin: 0;
+  flex: 1;
+  min-width: 12em;
+}
+
+.discussion-hint a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.discussion-comments h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 22px;
+  margin: 0 0 12px;
+}
+
+.discussion-empty {
+  margin: 0 0 8px;
+}
+
+.comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.comment {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.comment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: baseline;
+  margin-bottom: 6px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.comment-meta strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.comment p {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.7;
+  text-wrap: pretty;
+  line-break: strict;
+}
+
+.comment-form {
+  margin-top: 18px;
+}
+
+.comment-form textarea {
+  min-height: 110px;
+  font-size: 16px;
+}
+
 .studio {
   padding: 18px 7vw 80px;
 }

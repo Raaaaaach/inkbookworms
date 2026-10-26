@@ -32,15 +32,21 @@ DATA_DIR = ENV["DATA_DIR"] && !ENV["DATA_DIR"].empty? ? ENV["DATA_DIR"] : File.j
 DATA_FILE = File.join(DATA_DIR, "books.json")
 USERS_FILE = File.join(DATA_DIR, "users.json")
 FRIENDS_FILE = File.join(DATA_DIR, "friends.json")
+LIKES_FILE = File.join(DATA_DIR, "likes.json")
+COMMENTS_FILE = File.join(DATA_DIR, "comments.json")
 PASSWORD = ENV["BOOKWORMS_PASSWORD"] || "bookworms"
 PORT = (ENV["PORT"] || "4567").to_i
 BIND = ENV["BIND"] || "0.0.0.0"
+MAX_COMMENT_LENGTH = 1000
 
 FileUtils.mkdir_p(PUBLIC)
 FileUtils.mkdir_p(DATA_DIR)
 SEED_FILE = File.join(ROOT, "data", "books.json")
 if !File.file?(DATA_FILE) && File.file?(SEED_FILE) && File.expand_path(SEED_FILE) != File.expand_path(DATA_FILE)
   FileUtils.cp(SEED_FILE, DATA_FILE)
+end
+[LIKES_FILE, COMMENTS_FILE].each do |path|
+  File.write(path, "[]\n", encoding: "UTF-8") unless File.file?(path)
 end
 def load_list(path)
   return [] unless File.file?(path)
@@ -77,6 +83,22 @@ end
 
 def save_friends(friends)
   save_list(FRIENDS_FILE, friends)
+end
+
+def load_likes
+  load_list(LIKES_FILE)
+end
+
+def save_likes(likes)
+  save_list(LIKES_FILE, likes)
+end
+
+def load_comments
+  load_list(COMMENTS_FILE)
+end
+
+def save_comments(comments)
+  save_list(COMMENTS_FILE, comments)
 end
 
 def hash_secret(secret, salt)
@@ -141,6 +163,50 @@ end
 
 def find_book(id)
   load_books.find { |book| book["id"] == id }
+end
+
+def find_chapter(book, chapter_id)
+  Array(book && book["chapters"]).find { |chapter| chapter["id"] == chapter_id }
+end
+
+def chapter_likes(book_id, chapter_id)
+  load_likes.select { |item| item["bookId"] == book_id && item["chapterId"] == chapter_id }
+end
+
+def chapter_comments(book_id, chapter_id)
+  load_comments
+    .select { |item| item["bookId"] == book_id && item["chapterId"] == chapter_id }
+    .sort_by { |item| item["createdAt"].to_s }
+end
+
+def public_comment(comment)
+  {
+    "id" => comment["id"],
+    "readerId" => comment["readerId"],
+    "readerName" => comment["readerName"],
+    "body" => comment["body"],
+    "createdAt" => comment["createdAt"]
+  }
+end
+
+def engagement_payload(book_id, chapter_id, reader)
+  likes = chapter_likes(book_id, chapter_id)
+  {
+    "likeCount" => likes.length,
+    "liked" => reader ? likes.any? { |item| item["readerId"] == reader["id"] } : false,
+    "comments" => chapter_comments(book_id, chapter_id).map { |item| public_comment(item) }
+  }
+end
+
+def purge_chapter_engagement(book_id, chapter_id = nil)
+  likes = load_likes.reject do |item|
+    item["bookId"] == book_id && (chapter_id.nil? || item["chapterId"] == chapter_id)
+  end
+  comments = load_comments.reject do |item|
+    item["bookId"] == book_id && (chapter_id.nil? || item["chapterId"] == chapter_id)
+  end
+  save_likes(likes)
+  save_comments(comments)
 end
 
 def normalize_status(value)
@@ -399,6 +465,7 @@ server.mount_proc "/api" do |req, res|
         next
       end
       save_books(books)
+      purge_chapter_engagement(parts[1])
       json!(res, { "ok" => true })
     elsif method == "POST" && parts.length == 3 && parts[0] == "books" && parts[2] == "chapters"
       unless author?(req)
@@ -484,7 +551,84 @@ server.mount_proc "/api" do |req, res|
       books[index]["chapters"] = chapters
       books[index]["updatedAt"] = now
       save_books(books)
+      purge_chapter_engagement(parts[1], parts[3])
       json!(res, { "ok" => true, "book" => books[index] })
+    elsif method == "GET" && parts.length == 5 && parts[0] == "books" && parts[2] == "chapters" && parts[4] == "engagement"
+      book = find_book(parts[1])
+      if book.nil? || !can_see_book?(book, req) || find_chapter(book, parts[3]).nil?
+        json!(res, { "error" => "找不到這一章" }, 404)
+        next
+      end
+      json!(res, engagement_payload(parts[1], parts[3], current_reader(req)))
+    elsif method == "POST" && parts.length == 5 && parts[0] == "books" && parts[2] == "chapters" && parts[4] == "like"
+      reader = current_reader(req)
+      unless reader
+        json!(res, { "error" => "請先登入再按讚" }, 401)
+        next
+      end
+      book = find_book(parts[1])
+      if book.nil? || !can_see_book?(book, req) || find_chapter(book, parts[3]).nil?
+        json!(res, { "error" => "找不到這一章" }, 404)
+        next
+      end
+      likes = load_likes
+      existing = likes.index { |item| item["bookId"] == parts[1] && item["chapterId"] == parts[3] && item["readerId"] == reader["id"] }
+      if existing
+        likes.delete_at(existing)
+        save_likes(likes)
+      else
+        likes << {
+          "id" => SecureRandom.hex(8),
+          "bookId" => parts[1],
+          "chapterId" => parts[3],
+          "readerId" => reader["id"],
+          "readerName" => reader["name"],
+          "createdAt" => now
+        }
+        save_likes(likes)
+      end
+      json!(res, engagement_payload(parts[1], parts[3], reader))
+    elsif method == "POST" && parts.length == 5 && parts[0] == "books" && parts[2] == "chapters" && parts[4] == "comments"
+      reader = current_reader(req)
+      unless reader
+        json!(res, { "error" => "請先登入再留言" }, 401)
+        next
+      end
+      body = parse_body(req)
+      unless body
+        json!(res, { "error" => "無效的請求" }, 400)
+        next
+      end
+      book = find_book(parts[1])
+      if book.nil? || !can_see_book?(book, req) || find_chapter(book, parts[3]).nil?
+        json!(res, { "error" => "找不到這一章" }, 404)
+        next
+      end
+      text = body["body"].to_s.strip
+      if text.empty?
+        json!(res, { "error" => "請寫一點內容再送出" }, 400)
+        next
+      end
+      if text.length > MAX_COMMENT_LENGTH
+        json!(res, { "error" => "留言請在 #{MAX_COMMENT_LENGTH} 字以內" }, 400)
+        next
+      end
+      stamp = now
+      comment = {
+        "id" => SecureRandom.hex(8),
+        "bookId" => parts[1],
+        "chapterId" => parts[3],
+        "readerId" => reader["id"],
+        "readerName" => reader["name"],
+        "body" => text,
+        "createdAt" => stamp
+      }
+      comments = load_comments
+      comments << comment
+      save_comments(comments)
+      payload = engagement_payload(parts[1], parts[3], reader)
+      payload["comment"] = public_comment(comment)
+      json!(res, payload, 201)
     else
       json!(res, { "error" => "未知介面" }, 404)
     end
